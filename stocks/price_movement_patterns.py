@@ -215,6 +215,19 @@ def get_stock_data(code: str, name: str = "") -> pd.DataFrame:
 
     name 只用于识别 ST（主板 ST 涨跌停幅度为 5%），不影响取数逻辑"""
     import akshare as ak   # 延迟导入：只有抓数据的线程需要，绘图子进程不加载
+    # macOS arm64: akshare 新浪系接口每次调用都会 new 一个 MiniRacer(V8)实例,
+    # 多线程并发创建会触发 V8 分区地址空间初始化竞态直接 FATAL 崩溃(Linux 无此问题),
+    # 用全局锁把实例创建串行化。
+    import threading
+    import py_mini_racer
+    if not getattr(py_mini_racer.MiniRacer.__init__, "_mr_locked", False):
+        _mr_lock = threading.Lock()
+        _mr_orig_init = py_mini_racer.MiniRacer.__init__
+        def _mr_locked_init(self, *a, **kw):
+            with _mr_lock:
+                _mr_orig_init(self, *a, **kw)
+        setattr(_mr_locked_init, "_mr_locked", True)
+        py_mini_racer.MiniRacer.__init__ = _mr_locked_init
     try:
         if code in BROAD_INDICES:
             name, api_type, symbol = BROAD_INDICES[code][:3]
