@@ -109,7 +109,9 @@ jobs:
       - name: Restore ETF share cache
         uses: actions/cache@v4
         with:
-          path: etf/cache_etf
+          path: |
+            etf/cache_etf
+            etf/cache_huijin
           key: etf-cache-${{ steps.bjt.outputs.day }}-${{ github.run_id }}
           restore-keys: |
             etf-cache-${{ steps.bjt.outputs.day }}-
@@ -146,6 +148,11 @@ jobs:
       - name: Run ETF net-flow calendar
         working-directory: etf
         run: python etf_net_flow_calendar.py
+        continue-on-error: true
+
+      - name: Run huijin share tracker
+        working-directory: etf
+        run: python huijin_tracker.py
         continue-on-error: true
 
       - name: Run fund indicator scripts
@@ -211,6 +218,19 @@ jobs:
             -exec cp {} docs/ \;
 
           ls -la docs/
+
+      # Pages 导航页: docs/ 里是扁平文件名, 生成同目录 index.html, 以后新增看板免维护
+      - name: Generate docs index page
+        run: |
+          cd docs
+          {
+            printf '%s\n' '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>📊 看板导航 · broad-index-dashboard</title><style>body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#fafaf7;color:#222;max-width:960px;margin:0 auto;padding:24px 20px 48px}h1{font-size:22px;font-weight:600;margin:0 0 4px}.sub{color:#777;font-size:13px;margin-bottom:24px}a{display:block;padding:6px 0;border-bottom:1px solid #eee;color:#2c5f8a;text-decoration:none;font-size:14px}a:hover{text-decoration:underline}</style></head><body><h1>📊 看板导航</h1><div class="sub">GitHub Pages 自动生成 · 完整介绍与风险口径见 <a href="https://github.com/Owen434/broad-index-dashboard" style="display:inline;border:none;padding:0">仓库 README</a></div>'
+            for f in *.html; do
+              [ "$f" = "index.html" ] && continue
+              printf '<a href="%s">%s</a>\n' "$f" "$f"
+            done
+            printf '</body></html>\n'
+          } > index.html
 
       # 备份本次生成的文件
       - name: Backup generated files
