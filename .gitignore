@@ -4,16 +4,6 @@ __pycache__/
 stock_charts_output/
 *.xlsx
 .DS_Store
-# 本地运行生成物与缓存(不入库; docs/ 下由 CI 每日生成并提交)
+# 环境目录(需留在磁盘, 仅从 git 状态中隐藏; 生成物用后即删, 不用 ignore 规则)
 .venv/
 .pi/
-etf/*.html
-etf/cache_etf/
-etf/cache_huijin/
-funds/*.html
-funds/*.csv
-funds/index_cache/
-gold/*.html
-futures/output_cffex/
-drawdown/*.html
-stocks/*.html
