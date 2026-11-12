@@ -13,14 +13,22 @@
      仓库体积会线性爆炸；现在无论多少个指数、多少年数据，永远只有一个几十 KB 的
      文本文件，diff 也是文本级别，体积和历史包大小都可控。
   3. 移动端可看：viewport meta + 响应式网格（桌面4列，平板2列，手机1列）。
+
+用法:
+    python index_return_calendar.py                        # 默认 16 个宽基指数
+    python index_return_calendar.py --codes 510300 513050 # 追加自定义 ETF 到「自定义ETF」分类
+    # (页面是离线单文件, 浏览器内无法临时取数, 换/加代码需带参数重新生成)
 """
+import argparse
 import os
 import sys
 import json
 import importlib.util
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import pandas as pd
 
 warnings.filterwarnings('ignore')
 
@@ -59,8 +67,13 @@ def fetch_index_returns(code):
     return code, ret.dropna()
 
 
-def build_entity(code, ret_series):
-    name, _api_type, _symbol, _region, category = BROAD_INDICES[code]
+def build_entity(code, ret_series, name=None, category=None):
+    info = BROAD_INDICES.get(code)
+    if info:
+        name = name or info[0]
+        category = category or info[4]
+    name = name or code
+    category = category or '自定义ETF'
     latest_year = ret_series.index.max().year
     years = {}
     for y in range(latest_year - YEARS_BACK + 1, latest_year + 1):
@@ -71,6 +84,35 @@ def build_entity(code, ret_series):
     if not years:
         return None
     return {'id': code, 'name': name, 'category': category, 'years': years}
+
+
+def fetch_custom_returns(code):
+    """抓单只 ETF 前复权日线, 算日涨跌幅(%)。前复权保证分红日不出现假跌幅。"""
+    import akshare as ak   # 延迟导入, 与内核 get_stock_data 同款
+    start = (datetime(datetime.now().year - YEARS_BACK, 1, 1)
+             - timedelta(days=15)).strftime('%Y%m%d')
+    end = datetime.now().strftime('%Y%m%d')
+    df = ak.fund_etf_hist_em(symbol=code, period='daily',
+                             start_date=start, end_date=end, adjust='qfq')
+    if df is None or df.empty:
+        return None
+    idx = pd.to_datetime(df['日期'])
+    close = pd.to_numeric(df['收盘'], errors='coerce')
+    s = pd.Series(close.values, index=idx).dropna()
+    if len(s) < 2:
+        return None
+    return (s.pct_change() * 100).dropna()
+
+
+def etf_names(codes):
+    """东财 ETF 名单一次拿到代码->名称; 失败时退回用代码当名称。"""
+    import akshare as ak
+    try:
+        spot = ak.fund_etf_spot_em()
+        m = {str(c).zfill(6): n for c, n in zip(spot['代码'], spot['名称'])}
+        return {c: m.get(c, c) for c in codes}
+    except Exception:  # noqa: BLE001
+        return {c: c for c in codes}
 
 
 # ==================== 交互式 HTML 渲染 ====================
@@ -164,6 +206,9 @@ _HTML_TEMPLATE = r"""<!DOCTYPE html>
     <span class="group-label" style="margin-left:14px;">视图：</span>
     <button class="view-btn active" data-view="calendar">日历视图</button>
     <button class="view-btn" data-view="ranking">月度排名看板</button>
+    <span class="group-label" style="margin-left:14px;">配色：</span>
+    <button class="color-btn active" data-mode="cn">红涨绿跌</button>
+    <button class="color-btn" data-mode="intl">红跌绿涨</button>
   </div>
   <button id="btn-screenshot" class="screenshot-btn">📷 保存截图</button>
 </div>
@@ -200,12 +245,32 @@ let currentYear = null;
 let currentCategory = '__ALL__';
 let currentView = 'calendar';
 
+// 涨跌配色: 'cn'=红涨绿跌(A股习惯), 'intl'=红跌绿涨(国际习惯); 选择记忆在浏览器
+let colorMode = 'cn';
+try { colorMode = localStorage.getItem('cal_color_mode') || 'cn'; } catch (e) {}
+function upDownPalette() {
+  const cn = colorMode !== 'intl';
+  return {
+    upRGB: cn ? '239, 68, 68' : '34, 197, 94',
+    downRGB: cn ? '34, 197, 94' : '239, 68, 68',
+    upHex: cn ? '#dc2626' : '#16a34a',
+    downHex: cn ? '#16a34a' : '#dc2626',
+  };
+}
+function setColorMode(mode) {
+  colorMode = mode;
+  try { localStorage.setItem('cal_color_mode', mode); } catch (e) {}
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  renderAll();
+}
+
 function pctColor(v) {
   if (v === null || v === undefined || isNaN(v)) return 'transparent';
+  const p = upDownPalette();
   const strength = Math.min(Math.abs(v) / 2.5, 1.0);
   const alpha = (0.15 + strength * 0.65).toFixed(2);
-  if (v > 0) return `rgba(239, 68, 68, ${alpha})`;
-  if (v < 0) return `rgba(34, 197, 94, ${alpha})`;
+  if (v > 0) return `rgba(${p.upRGB}, ${alpha})`;
+  if (v < 0) return `rgba(${p.downRGB}, ${alpha})`;
   return '#fafafa';
 }
 
@@ -261,7 +326,8 @@ function buildMonthCard(year, month, daily, streakByDate = new Map()) {
     const cum = (rets.reduce((acc, r) => acc * (1 + r / 100), 1) - 1) * 100;
     const avgUp = up.length ? up.reduce((a, b) => a + b, 0) / up.length : 0;
     const avgDown = down.length ? down.reduce((a, b) => a + b, 0) / down.length : 0;
-    const color = cum > 0 ? '#dc2626' : (cum < 0 ? '#16a34a' : '#6b7280');
+    const p = upDownPalette();
+    const color = cum > 0 ? p.upHex : (cum < 0 ? p.downHex : '#6b7280');
     statHtml = `<div class="month-stat" style="color:${color}">累计:${fmtPct(cum)} | 上涨${up.length}天 | 下跌${down.length}天</div>
                 <div class="month-stat sub">平均涨幅${fmtPct(avgUp)} | 平均跌幅${fmtPct(avgDown)}</div>`;
   }
@@ -283,7 +349,8 @@ function buildStatsRows(entries) {
     const down = vals.filter(v => v < 0).length;
     const upProb = total ? (up / total * 100).toFixed(1) + '%' : '0.0%';
     const avg = total ? vals.reduce((a, b) => a + b, 0) / total : 0;
-    const avgColor = avg > 0 ? '#dc2626' : (avg < 0 ? '#16a34a' : '#374151');
+    const pc = upDownPalette();
+    const avgColor = avg > 0 ? pc.upHex : (avg < 0 ? pc.downHex : '#374151');
     return `<tr><td>${label}</td><td>${total}</td><td>${up}</td><td>${down}</td><td>${upProb}</td>
              <td style="color:${avgColor};font-weight:bold;">${total ? fmtPct(avg) : '0.00%'}</td></tr>`;
   }).join('');
@@ -499,10 +566,11 @@ function setCategory(cat) {
 // ==================== 月度收益排名看板 ====================
 function monthColor(v) {
   if (v === null || v === undefined || isNaN(v)) return 'transparent';
+  const p = upDownPalette();
   const strength = Math.min(Math.abs(v) / 8.0, 1.0);  
   const alpha = (0.15 + strength * 0.65).toFixed(2);
-  if (v > 0) return `rgba(239, 68, 68, ${alpha})`;
-  if (v < 0) return `rgba(34, 197, 94, ${alpha})`;
+  if (v > 0) return `rgba(${p.upRGB}, ${alpha})`;
+  if (v < 0) return `rgba(${p.downRGB}, ${alpha})`;
   return '#fafafa';
 }
 
@@ -592,6 +660,8 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.category-btn').forEach(btn => btn.addEventListener('click', function () { setCategory(this.dataset.category); }));
   document.querySelectorAll('.entity-btn').forEach(btn => btn.addEventListener('click', function () { setEntity(this.dataset.id); }));
   document.querySelectorAll('.view-btn').forEach(btn => btn.addEventListener('click', function () { setView(this.dataset.view); }));
+  document.querySelectorAll('.color-btn').forEach(btn => btn.addEventListener('click', function () { setColorMode(this.dataset.mode); }));
+  document.querySelectorAll('.color-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === colorMode));
   if (DATA.entities.length) setEntity(DATA.entities[0].id);
 
   const btnScreenshot = document.getElementById('btn-screenshot');
@@ -655,6 +725,15 @@ def render_calendar_dashboard(entities, page_title, header_title, subtitle, outp
 
 
 def main():
+    ap = argparse.ArgumentParser(description='宽基指数收益日历（支持 --codes 追加自定义 ETF）')
+    ap.add_argument('--codes', nargs='+', default=[], metavar='CODE',
+                    help='追加自定义 ETF 代码（空格或逗号分隔），如 --codes 510300 512880')
+    args = ap.parse_args()
+    custom_codes = []
+    for part in args.codes:
+        for c in str(part).replace(',', ' ').split():
+            if c and c not in custom_codes:
+                custom_codes.append(c)
     print('>>> 正在获取宽基指数历史行情，计算日涨跌幅...')
     entities = []
     data_end = None
@@ -678,6 +757,27 @@ def main():
             if data_end is None or last_date > data_end:
                 data_end = last_date
 
+    custom_codes = [c for c in custom_codes if c not in BROAD_INDICES]
+    if custom_codes:
+        print(f'>>> 追加自定义 ETF：{"，".join(custom_codes)}')
+        names = etf_names(custom_codes)
+        for c in custom_codes:
+            try:
+                ret = fetch_custom_returns(c)
+            except Exception as e:  # noqa: BLE001
+                print(f'  ⚠️ {c} 获取失败：{e}')
+                continue
+            if ret is None or ret.empty:
+                print(f'  ⚠️ {c} 无有效数据，跳过')
+                continue
+            ent = build_entity(c, ret, name=names.get(c, c), category='自定义ETF')
+            if ent is None:
+                continue
+            entities.append(ent)
+            last_date = ret.index.max()
+            if data_end is None or last_date > data_end:
+                data_end = last_date
+
     if not entities:
         print('未获取到任何指数数据，退出。')
         return
@@ -691,7 +791,7 @@ def main():
     render_calendar_dashboard(
         entities,
         page_title='宽基指数收益日历',
-        header_title='宽基指数收益日历（红涨绿跌）',
+        header_title='宽基指数收益日历',
         subtitle=subtitle,
         output_path=OUTPUT_FILE,
     )
