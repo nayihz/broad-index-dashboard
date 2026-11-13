@@ -15,9 +15,9 @@
   3. 移动端可看：viewport meta + 响应式网格（桌面4列，平板2列，手机1列）。
 
 用法:
-    python index_return_calendar.py                        # 默认 16 个宽基指数
-    python index_return_calendar.py --codes 510300 513050 # 追加自定义 ETF 到「自定义ETF」分类
-    # (页面是离线单文件, 浏览器内无法临时取数, 换/加代码需带参数重新生成)
+    python index_return_calendar.py      # 16 个宽基指数 + DEFAULT_CUSTOM_ETFS 里的默认自定义 ETF
+    python index_return_calendar.py --codes 510300  # 临时再追加其他 ETF(与默认合并)
+    # 自定义 ETF 行情: 东财 EOD 前复权日线为主源, push2 被限流时自动退到东财基金 F10 净值日增长率
 """
 import argparse
 import os
@@ -35,6 +35,8 @@ warnings.filterwarnings('ignore')
 CORE_FILE = 'price_movement_patterns.py'
 YEARS_BACK = 2  # 展示今年 + 去年
 OUTPUT_FILE = 'index_return_calendar.html'
+# 默认追加的自定义 ETF(与 --codes 合并; 想换/加改这里, CI 每晚自动带上)
+DEFAULT_CUSTOM_ETFS = ['562500', '515080']
 
 
 def load_core():
@@ -87,32 +89,53 @@ def build_entity(code, ret_series, name=None, category=None):
 
 
 def fetch_custom_returns(code):
-    """抓单只 ETF 前复权日线, 算日涨跌幅(%)。前复权保证分红日不出现假跌幅。"""
+    """抓单只 ETF 日涨跌幅(%)。
+    主源: 东财 EOD 前复权日线(前复权保证分红日无假跌幅);
+    push2 行情被限流时退到东财基金 F10 净值日增长率——另一端点,
+    且日增长率本身就是含分红的真实日收益, 与主源口径等价。"""
     import akshare as ak   # 延迟导入, 与内核 get_stock_data 同款
     start = (datetime(datetime.now().year - YEARS_BACK, 1, 1)
              - timedelta(days=15)).strftime('%Y%m%d')
     end = datetime.now().strftime('%Y%m%d')
-    df = ak.fund_etf_hist_em(symbol=code, period='daily',
-                             start_date=start, end_date=end, adjust='qfq')
-    if df is None or df.empty:
-        return None
-    idx = pd.to_datetime(df['日期'])
-    close = pd.to_numeric(df['收盘'], errors='coerce')
-    s = pd.Series(close.values, index=idx).dropna()
-    if len(s) < 2:
-        return None
-    return (s.pct_change() * 100).dropna()
+    try:
+        df = ak.fund_etf_hist_em(symbol=code, period='daily',
+                                 start_date=start, end_date=end, adjust='qfq')
+        idx = pd.to_datetime(df['日期'])
+        close = pd.to_numeric(df['收盘'], errors='coerce')
+        s = pd.Series(close.values, index=idx).dropna()
+        if len(s) < 2:
+            return None
+        return (s.pct_change() * 100).dropna()
+    except Exception:  # noqa: BLE001  push2 限流/断连 -> F10 净值口径兜底
+        nv = ak.fund_open_fund_info_em(symbol=code, indicator='单位净值走势')
+        if nv is None or nv.empty or '日增长率' not in nv.columns:
+            return None
+        idx = pd.to_datetime(nv['净值日期'])
+        p = pd.to_numeric(nv['日增长率'], errors='coerce')
+        s = pd.Series(p.values, index=idx).dropna()
+        return s[s.index >= pd.Timestamp.now() - pd.Timedelta(days=365 * (YEARS_BACK + 1))]
 
 
 def etf_names(codes):
-    """东财 ETF 名单一次拿到代码->名称; 失败时退回用代码当名称。"""
+    """ETF 代码->名称。主源 push2 现价名单; 限流时退到东财基金名录(另一端点); 再退回代码。"""
     import akshare as ak
+    out = {c: None for c in codes}
     try:
         spot = ak.fund_etf_spot_em()
         m = {str(c).zfill(6): n for c, n in zip(spot['代码'], spot['名称'])}
-        return {c: m.get(c, c) for c in codes}
+        for c in codes:
+            out[c] = out[c] or m.get(c)
     except Exception:  # noqa: BLE001
-        return {c: c for c in codes}
+        pass
+    if any(v is None for v in out.values()):
+        try:
+            names = ak.fund_name_em()
+            m = {str(c).zfill(6): n for c, n in zip(names['基金代码'], names['基金简称'])}
+            for c in codes:
+                out[c] = out[c] or m.get(c)
+        except Exception:  # noqa: BLE001
+            pass
+    return {c: (v or c) for c, v in out.items()}
 
 
 # ==================== 交互式 HTML 渲染 ====================
@@ -730,10 +753,10 @@ def main():
                     help='追加自定义 ETF 代码（空格或逗号分隔），如 --codes 510300 512880')
     args = ap.parse_args()
     custom_codes = []
-    for part in args.codes:
-        for c in str(part).replace(',', ' ').split():
-            if c and c not in custom_codes:
-                custom_codes.append(c)
+    for c in list(DEFAULT_CUSTOM_ETFS) + list(args.codes):
+        for c2 in str(c).replace(',', ' ').split():
+            if c2 and c2 not in custom_codes:
+                custom_codes.append(c2)
     print('>>> 正在获取宽基指数历史行情，计算日涨跌幅...')
     entities = []
     data_end = None
