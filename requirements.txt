@@ -1,4 +1,7 @@
-akshare
+# 锁在 1.20.45 之前: 1.20.45/46 起多接口改名(tool_trade_date_hist_sina/
+# futures_foreign_hist 等), CI 装最新版会导致主看板/期货/黄金脚本启动即崩;
+# 解锁前需逐一适配新接口名
+akshare<1.20.45
 pandas
 numpy
 plotly
