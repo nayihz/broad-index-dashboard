@@ -9,7 +9,9 @@ import os
 # 1. 获取并清洗数据
 # ==========================================
 print("正在获取 COMEX 黄金数据...")
-gold_comex_df = ak.futures_foreign_hist(symbol="GC")
+# akshare 1.20.46 起 futures_foreign_hist 更名 futures_foreign_hist_sina(date/close 列兼容)
+_gold_hist = getattr(ak, "futures_foreign_hist", None) or getattr(ak, "futures_foreign_hist_sina")
+gold_comex_df = _gold_hist(symbol="GC")
 gold_comex_df['date'] = pd.to_datetime(gold_comex_df['date'])
 gold_comex_df = gold_comex_df.sort_values('date')
 

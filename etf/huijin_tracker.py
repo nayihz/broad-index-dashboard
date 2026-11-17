@@ -228,7 +228,8 @@ def _tcode(code: str) -> str:
 
 
 def fetch_amounts(codes, trade_days) -> dict:
-    """近 45 个交易日成交额(元)。akshare EOD, 按代码增量缓存; 缓存齐全时不联网。"""
+    """近 45 个交易日成交额(元)。主源东财 EOD(precise), push2 限流时退到
+    新浪日线(自带精确成交额 amount 列, 不同主机限流互不影响); 按代码增量缓存。"""
     hi, lo = trade_days[-1], trade_days[-45]
     AMT_CACHE.mkdir(exist_ok=True)
     out, todo = {}, []
@@ -245,6 +246,7 @@ def fetch_amounts(codes, trade_days) -> dict:
     import akshare as ak  # 延迟导入: 缓存齐全时全程离线
     for code, f, df, have_max in todo:
         start = lo if have_max is None else min(have_max - pd.Timedelta(days=15), lo)
+        new = pd.DataFrame(columns=["日期", "成交额"])
         try:
             raw = ak.fund_etf_hist_em(symbol=code, period="daily",
                                      start_date=start.strftime("%Y%m%d"),
@@ -252,8 +254,15 @@ def fetch_amounts(codes, trade_days) -> dict:
             new = pd.DataFrame({"日期": pd.to_datetime(raw["日期"]),
                                 "成交额": pd.to_numeric(raw["成交额"], errors="coerce")}).dropna()
         except Exception as exc:  # noqa: BLE001
-            print(f"  [WARN] {code} 成交额抓取失败: {exc}")
-            new = pd.DataFrame(columns=["日期", "成交额"])
+            print(f"  [WARN] {code} 东财成交额失败({type(exc).__name__}), 转新浪日线兜底")
+        if not len(new):
+            try:
+                sina = ak.fund_etf_hist_sina(symbol=_tcode(code))
+                new = pd.DataFrame({"日期": pd.to_datetime(sina["date"]),
+                                    "成交额": pd.to_numeric(sina["amount"], errors="coerce")}).dropna()
+                new = new[new["日期"].between(pd.Timestamp(start), pd.Timestamp(hi))]
+            except Exception as exc:  # noqa: BLE001
+                print(f"  [WARN] {code} 成交额抓取失败: {exc}")
         if len(new):
             df = pd.concat([df, new]).drop_duplicates("日期", keep="last").sort_values("日期")
             df.to_parquet(f, index=False)
