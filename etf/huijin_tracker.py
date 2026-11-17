@@ -234,11 +234,11 @@ def fetch_amounts(codes, trade_days) -> dict:
     AMT_CACHE.mkdir(exist_ok=True)
     out, todo = {}, []
     for code in codes:
-        f = AMT_CACHE / f"amt_{code}.parquet"
+        f = AMT_CACHE / f"amt_v2_{code}.parquet"
         df = pd.read_parquet(f) if f.exists() else pd.DataFrame()
         have_max = pd.to_datetime(df["日期"]).max() if len(df) else None
         if have_max is not None and have_max >= hi:
-            out[code] = df
+            out[code] = df[df["日期"] <= hi]  # 读取端截断: 旧缓存可能越过判定日上限
         else:
             todo.append((code, f, df, have_max))
     if not todo:
@@ -265,9 +265,11 @@ def fetch_amounts(codes, trade_days) -> dict:
                 print(f"  [WARN] {code} 成交额抓取失败: {exc}")
         if len(new):
             df = pd.concat([df, new]).drop_duplicates("日期", keep="last").sort_values("日期")
-            df.to_parquet(f, index=False)
-            time.sleep(0.3)
         if len(df):
+            df = df[df["日期"] <= hi]  # 写入端截断: 上限之后不入缓存(防盘中半根K线污染)
+            if len(new):
+                df.to_parquet(f, index=False)
+                time.sleep(0.3)
             out[code] = df
     return out
 
