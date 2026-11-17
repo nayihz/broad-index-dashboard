@@ -488,6 +488,19 @@ def build_html(fig, pool, per, base_date, missing, v, path: Path):
     path.write_text(html, encoding="utf-8")
 
 
+def _last_completed_trade_day(now=None):
+    """判定日上限: 收盘(15:05)后允许当日, 否则退到上一工作日。
+    新浪/东财盘中会给出当日半根K线, 不截断会把"半日成交额"当成全天, 判定失真。"""
+    now = now or pd.Timestamp.now()
+    d = now.normalize()
+    if d.weekday() < 5 and now.time() >= pd.Timestamp("15:05").time():
+        return d
+    d -= pd.Timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= pd.Timedelta(days=1)
+    return d
+
+
 def main():
     if not PARQUET.exists():
         sys.exit(f"未找到 {PARQUET.name}, 先运行: python etf_broadbase_dashboard.py")
@@ -506,7 +519,7 @@ def main():
           f"基期 {base_date:%Y-%m-%d}")
     print(f"当前: 合计 {pool.iloc[-1]:,.0f} 亿份, 加仓指数 {index.iloc[-1]:.2f}")
 
-    hi = max(pool.index[-1], pd.Timestamp.now().normalize())
+    hi = max(pool.index[-1], _last_completed_trade_day())
     amounts = fetch_amounts(list(per.columns), pool.index.union(pd.DatetimeIndex([hi])))
     live = fetch_live(list(per.columns))
     v = build_verdict(df, pool, per, amounts, live)
