@@ -18,7 +18,8 @@ huijin_tracker.py
   - 全部份额变化都记为"国家队"操作是参考口径, 实际可能来自任何投资者。
   - "今日结论"判定照搬参考页面: 放量倍数(当日合计成交额/20日均额, akshare EOD)与
     当日主动净买入(腾讯行情外盘−内盘推算)两条件定级; 收盘后口径, 无盘中同时点对齐;
-    另附本仓库独有的交易所官方净申赎作印证。成交额按代码增量缓存在 cache_huijin/。
+    另附本仓库独有的交易所官方净申赎作印证, 以及尾盘占比(新浪分时): 判定日
+    14:30-15:00 成交占全天比例 vs 20 日常态, 超 1.25 倍提示收盘窗口异动。
 """
 import re
 import sys
@@ -301,7 +302,47 @@ def fetch_live(codes) -> dict:
     return out
 
 
-def build_verdict(df, pool, per, amounts, live) -> dict:
+def fetch_tail_signal(codes, verdict_day, window=20):
+    """新浪 5 分钟 K: 判定日尾盘(14:30-15:00)成交量占全天比例, 与此前 window 个
+    完整交易日同口径均值对比(池内合计口径)。一次请求约含 42 天历史; 与东财 push2
+    不同主机, 限流互不影响。返回 {cur, norm} 或 None(数据不足)。"""
+    import akshare as ak
+    tail, total, ok = {}, {}, 0
+    for code in codes:
+        try:
+            df = ak.stock_zh_a_minute(symbol=_tcode(code), period="5")
+            dt = pd.to_datetime(df["day"])
+        except Exception as exc:  # noqa: BLE001
+            print(f"  [WARN] {code} 分时抓取失败: {exc}")
+            continue
+        ok += 1
+        vol = pd.to_numeric(df["volume"], errors="coerce").fillna(0)
+        tm = dt.dt.strftime("%H:%M")
+        for d, m in df.groupby(dt.dt.date).groups.items():
+            g_tm, g_vol = tm[m], vol[m]
+            if g_tm.max() < "15:00":     # 不完整日(盘中)不计入
+                continue
+            tot = float(g_vol.sum())
+            if tot <= 0:
+                continue
+            last30 = float(g_vol[(g_tm >= "14:30") & (g_tm <= "15:00")].sum())
+            tail[d] = tail.get(d, 0.0) + last30
+            total[d] = total.get(d, 0.0) + tot
+        time.sleep(0.2)
+    if ok < max(3, len(codes) // 4):
+        return None
+    vd = verdict_day.date() if hasattr(verdict_day, "date") else verdict_day
+    days = sorted(total)
+    if vd not in total:
+        return None
+    hist = [d for d in days if d < vd][-window:]
+    if len(hist) < window // 2:
+        return None
+    norm = sum(tail[d] for d in hist) / sum(total[d] for d in hist)
+    return {"cur": tail[vd] / total[vd], "norm": norm, "codes": ok, "days": len(hist)}
+
+
+def build_verdict(df, pool, per, amounts, live, tail=None) -> dict:
     """参考页面"今日结论"的收盘后口径: 放量倍数 + 主动净买入, 附交易所官方净申赎。"""
     codes = list(per.columns)
     last = pool.index[-1]
@@ -384,10 +425,17 @@ def build_verdict(df, pool, per, amounts, live) -> dict:
                 reason += f" 当日交易所口径净申购 {net_flow:+.1f} 亿份，量价与份额同向。"
             elif net_flow < 0:
                 reason += f" 当日交易所口径净赎回 {net_flow:+.1f} 亿份，量价信号未获份额数据印证。"
+    # ⑤ 尾盘占比(新浪分时): 判定日 14:30-15:00 成交占全天 vs 20 日常态,
+    # 超 1.25 倍提示——"全天平静但尾盘放量"是收盘窗口操作的典型特征
+    if tail and tail.get("cur") and tail.get("norm") and tail["cur"] > tail["norm"] * 1.25:
+        lead = "但" if level == "cool" else ""
+        reason += (f" {lead}尾盘半小时成交占全天 {tail['cur']:.0%}，"
+                   f"明显高于 20 日均值 {tail['norm']:.0%}（收盘窗口集中成交）。")
     if net_flow != net_flow and pool.index[-1] != last:
         reason += f" 判定日({last:%Y-%m-%d})交易所份额尚未发布（沪市 T+1 上午更新），净申赎待下次刷新。"
     return dict(date=last, level=level, title=title, reason=reason, sum_amt=sum_amt,
-                sum_base=sum_base, ratio=ratio, sum_net=sum_net, wpct=wpct, net_flow=net_flow)
+                sum_base=sum_base, ratio=ratio, sum_net=sum_net, wpct=wpct, net_flow=net_flow,
+                tail_cur=(tail or {}).get("cur"), tail_norm=(tail or {}).get("norm"))
 
 
 def member_table(per: pd.DataFrame, delta20: pd.Series, last) -> str:
@@ -471,6 +519,9 @@ def build_html(fig, pool, per, base_date, missing, v, path: Path):
   <div><div class="k">当日净申赎</div>
   <div class="v" style="color:{'#222' if v['net_flow'] != v['net_flow'] else (UP if v['net_flow'] >= 0 else DOWN)}">{_numfmt(v['net_flow'])} 亿份</div>
   <div class="n">交易所官方份额口径</div></div>
+  <div><div class="k">尾盘半小时占比</div>
+  <div class="v" style="color:{'#ff4713' if v['tail_cur'] and v['tail_cur'] > v['tail_norm'] * 1.25 else '#222'}">{_numfmt(v['tail_cur'], '{:.0%}')}</div>
+  <div class="n">20日常态 {_numfmt(v['tail_norm'], '{:.0%}')} · 新浪分时</div></div>
 </div>
 <div class="vcaveat">判定为收盘后口径（无盘中同时点对齐）；「主动净买入」是外盘−内盘的逐笔方向推算，不是资金净流入，不含大宗与申赎套利对冲；全部结论均为量价推测，不能证明任何机构当日是否交易。不构成投资建议。</div>
 </section>
@@ -524,10 +575,15 @@ def main():
     hi = max(pool.index[-1], _last_completed_trade_day())
     amounts = fetch_amounts(list(per.columns), pool.index.union(pd.DatetimeIndex([hi])))
     live = fetch_live(list(per.columns))
-    v = build_verdict(df, pool, per, amounts, live)
+    amt_last = max((pd.to_datetime(d["日期"]).max() for d in amounts.values()),
+                   default=None) if amounts else None
+    verdict_day = max(pool.index[-1], amt_last) if amt_last is not None else pool.index[-1]
+    tail = fetch_tail_signal(list(per.columns), verdict_day)
+    v = build_verdict(df, pool, per, amounts, live, tail)
     print(f"今日结论({v['date']:%Y-%m-%d}): {v['title']}")
     print(f"  放大 {_numfmt(v['ratio'], '{:.2f}')}× | 主动净买入 {_numfmt(v['sum_net'])} 亿 | "
-          f"加权涨跌 {_numfmt(v['wpct'], '{:+.2f}')}% | 净申赎 {_numfmt(v['net_flow'])} 亿份")
+          f"加权涨跌 {_numfmt(v['wpct'], '{:+.2f}')}% | 净申赎 {_numfmt(v['net_flow'])} 亿份 | "
+          f"尾盘半小时 {_numfmt(v['tail_cur'], '{:.0%}')}")
 
     fig = make_figure(pool, base_date)
     build_html(fig, pool, per, base_date, missing, v, OUT_HTML)
