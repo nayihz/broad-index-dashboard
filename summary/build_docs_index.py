@@ -41,6 +41,9 @@ SECTIONS = [
     ("⑥ 黄金", [
         ("gold_ma_slopes_interactive.html", "COMEX 黄金多周期均线与斜率", "四周期斜率分位"),
     ]),
+    ("⑦ 美股期权", [
+        ("options_microstructure_dashboard.html", "美股期权微观结构与流动性踩踏监控", "VIX 家族 / P/C / 自算 GEX · 四阶段判定 · 每交易日收盘后自动更新"),
+    ]),
 ]
 
 CSS = """

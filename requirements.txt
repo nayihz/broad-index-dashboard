@@ -11,3 +11,4 @@ matplotlib
 requests
 scipy
 scikit-learn
+yfinance
