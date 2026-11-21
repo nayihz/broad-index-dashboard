@@ -180,7 +180,7 @@ docs/     HTML 输出（GitHub Actions 每个交易日自动重新生成，仅�
 | **③ 回撤与信号回测** |宽基指数 + 基金回撤/过热信号回测|  <img src="docs/回撤与信号回测.png" width="360"> | https://owen434.github.io/broad-index-dashboard/drawdown_dashboard.html |
 | **④ 股指期货持仓** |中信期货 / 前20会员净持仓|<img src="docs/cffex_net_position.png" width="360"> | https://owen434.github.io/broad-index-dashboard/cffex_net_position.html |
 | **⑤ 黄金** | 多周期均线与斜率 | <img src="docs/黄金多周期均线及动能斜率分析系统.png" width="360"> | https://owen434.github.io/broad-index-dashboard/gold_ma_slopes_interactive.html |
-| **⑥ 美股期权** | 微观结构与流动性踩踏监控 | （无截图） | https://owen434.github.io/broad-index-dashboard/options_microstructure_dashboard.html |
+| **⑥ 美股期权** | 微观结构与流动性踩踏监控 | （无截图） | https://nayihz.github.io/broad-index-dashboard/options_microstructure_dashboard.html |
 
 （链接对应 `docs/` 目录下 GitHub Actions 每个交易日自动重新生成的 HTML，首次运行前打开会 404。收益日历、股指期货持仓页面手机打开也能正常看：布局会自动收窄到单列，表格支持横向滑动。）
 
