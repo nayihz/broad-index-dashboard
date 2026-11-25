@@ -28,29 +28,29 @@
  },
  "2026-11-24": {
   "values": {
-   "vixeqVix": 1.84,
-   "dspx": 41.0,
-   "nvda": 165.1,
-   "vix": 26.6,
-   "vvix": 117.4,
-   "vixVxv": 1.04,
-   "vix9dVix": 1.04,
-   "skew": 140.4,
-   "pcEquity": 0.55,
-   "pcTotal": 0.94,
-   "pcIndex": 1.21,
-   "spxGex": -67.6,
-   "dealerGamma": -8.7,
-   "netDelta": 0.0
+   "vixeqVix": 1.9,
+   "dspx": 42.6,
+   "nvda": 155.4,
+   "vix": 26.4,
+   "vvix": 114.1,
+   "vixVxv": 1.03,
+   "vix9dVix": 1.01,
+   "skew": 139.2,
+   "pcEquity": 0.57,
+   "pcTotal": 0.95,
+   "pcIndex": 1.12,
+   "spxGex": -69.0,
+   "dealerGamma": -6.6,
+   "netDelta": 3.0
   },
   "raw": {
-   "gex90_b": -67.64,
-   "gex9_b": -21.71,
-   "delta_shares_m": -147.1,
-   "n_expirations": 28
+   "gex90_b": -69.01,
+   "gex9_b": -16.51,
+   "delta_shares_m": -144.4,
+   "n_expirations": 30
   },
-  "as_of": "2026-11-24 05:28:58 UTC",
-  "final": false,
-  "chain_fallback": true
+  "as_of": "2026-11-25 04:31:41 UTC",
+  "final": true,
+  "chain_fallback": false
  }
 }
