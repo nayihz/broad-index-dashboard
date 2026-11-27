@@ -79,5 +79,32 @@
   "as_of": "2026-11-26 03:43:48 UTC",
   "final": true,
   "chain_fallback": true
+ },
+ "2026-11-26": {
+  "values": {
+   "vixeqVix": 1.93,
+   "dspx": 43.2,
+   "nvda": 149.3,
+   "vix": 26.8,
+   "vvix": 115.4,
+   "vixVxv": 1.02,
+   "vix9dVix": 1.1,
+   "skew": 142.1,
+   "pcEquity": 0.64,
+   "pcTotal": 0.98,
+   "pcIndex": 1.04,
+   "spxGex": -69.0,
+   "dealerGamma": -6.6,
+   "netDelta": 3.0
+  },
+  "raw": {
+   "gex90_b": -69.01,
+   "gex9_b": -16.51,
+   "delta_shares_m": -144.4,
+   "n_expirations": 30
+  },
+  "as_of": "2026-11-27 03:45:12 UTC",
+  "final": true,
+  "chain_fallback": true
  }
 }

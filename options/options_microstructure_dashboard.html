@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- 由 options/build_options_dashboard.py 生成 · 数据截至 2026-11-26 03:43 UTC · 复刻自 Google Sites 原版(备份于 options/reference/) -->
+<!-- 由 options/build_options_dashboard.py 生成 · 数据截至 2026-11-27 03:45 UTC · 复刻自 Google Sites 原版(备份于 options/reference/) -->
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -234,9 +234,9 @@ Check your Browserslist config to be sure that your targets are set up correctly
             </h1>
           </div>
           <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>数据基准：<strong class="text-slate-700 font-medium">2026-11-25（收盘定版）</strong></span>
+            <span>数据基准：<strong class="text-slate-700 font-medium">2026-11-26（收盘定版）</strong></span>
             <span class="hidden sm:inline text-slate-300">|</span>
-            <span>数据：Yahoo Finance（VIX 家族/DSPX/VIXEQ/SKEW/NVDA） · Cboe 官方统计（P/C） · SPX 期权链自算（BS Greeks） · 更新于 2026-11-26 03:43 UTC · 做市商指标沿用 2026-11-24 快照（本日链数据退化：疑似周末 IV 未更新）</span>
+            <span>数据：Yahoo Finance（VIX 家族/DSPX/VIXEQ/SKEW/NVDA） · Cboe 官方统计（P/C） · SPX 期权链自算（BS Greeks） · 更新于 2026-11-27 03:45 UTC · 做市商指标沿用 2026-11-25 快照（本日链数据退化：疑似周末 IV 未更新）</span>
           </p>
         </div>
 
@@ -270,7 +270,7 @@ Check your Browserslist config to be sure that your targets are set up correctly
         <div class="flex flex-wrap items-center gap-1.5" id="scenario-buttons">
           <span class="text-xs font-medium text-slate-500 mr-1">情景推演：</span>
           <button data-scenario="current" class="scenario-btn px-3 py-1.5 rounded-md text-xs font-medium border transition-colors">
-            当前实盘 (11/25)
+            当前实盘 (11/26)
           </button>
           <button data-scenario="stage1" class="scenario-btn px-3 py-1.5 rounded-md text-xs font-medium border transition-colors">
             阶段一：离散繁荣稳态
@@ -290,7 +290,7 @@ Check your Browserslist config to be sure that your targets are set up correctly
           <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          重置为 11/25 实盘数据
+          重置为 11/26 实盘数据
         </button>
       </div>
     </div>
@@ -592,15 +592,15 @@ Check your Browserslist config to be sure that your targets are set up correctly
     // 1. 预设情景数据集
     const SCENARIOS = {
       current: {
-        label: '当前实盘 (11/25)',
+        label: '当前实盘 (11/26)',
         values: {
-          vixeqVix: 1.82,
+          vixeqVix: 1.93,
           dspx: 43.2,
           nvda: 149.3,
-          vix: 28.3,
+          vix: 26.8,
           vvix: 115.4,
-          vixVxv: 1.08,
-          vix9dVix: 1.05,
+          vixVxv: 1.02,
+          vix9dVix: 1.1,
           skew: 142.1,
           pcEquity: 0.64,
           pcTotal: 0.98,
